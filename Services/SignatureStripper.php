@@ -62,6 +62,8 @@ class SignatureStripper
      */
     protected function cleanHtml($body)
     {
+        $body = $this->stripSignatureImages($body);
+
         $bodyWithLineBreaks = preg_replace(
             '/(<br\s*\/?>|<\/p>|<\/div>|<\/li>|<\/tr>|<\/h[1-6]>)/i',
             "$1\n",
@@ -478,6 +480,15 @@ class SignatureStripper
         }
 
         return $flags;
+    }
+
+    protected function stripSignatureImages($html)
+    {
+        return preg_replace(
+            '/<img\b[^>]*(?:src|alt|title|name|id)=["\'][^"\']*C2_signature_[^"\']*["\'][^>]*>/iu',
+            '',
+            $html
+        );
     }
 
     /**
