@@ -1,0 +1,26 @@
+{
+    "name": "SignatureCutter",
+    "alias": "signaturecutter",
+    "description": "Cuts noisy signatures and forwarded mail headers from incoming customer emails.",
+    "version": "1.0.0",
+    "detailsUrl": "",
+    "author": "Local",
+    "authorUrl": "",
+    "requiredAppVersion": "1.8.0",
+    "license": "AGPL-3.0",
+    "keywords": [
+        "email",
+        "signature",
+        "cleanup"
+    ],
+    "active": 0,
+    "order": 0,
+    "providers": [
+        "Modules\\SignatureCutter\\Providers\\SignatureCutterServiceProvider"
+    ],
+    "aliases": {},
+    "files": [
+        "start.php"
+    ],
+    "requires": []
+}

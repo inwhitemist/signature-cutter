@@ -1,0 +1,11 @@
+{
+    "name": "local/signature-cutter",
+    "description": "FreeScout module for cutting signatures and forwarded headers from incoming emails.",
+    "type": "freescout-module",
+    "license": "AGPL-3.0",
+    "autoload": {
+        "psr-4": {
+            "Modules\\SignatureCutter\\": ""
+        }
+    }
+}
