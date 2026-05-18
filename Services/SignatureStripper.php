@@ -269,6 +269,12 @@ class SignatureStripper
             return false;
         }
 
+        $parts = array_values(array_filter(array_map('trim', explode('|', $line))));
+
+        if (count($parts) >= 3 && $this->looksLikePersonName($parts[0])) {
+            return true;
+        }
+
         return $this->isContactLine($line)
             || $this->isCorporateMarkerLine($line)
             || $this->looksLikePersonName($line);
@@ -480,7 +486,17 @@ class SignatureStripper
      * @return string
      */
     protected function trimTrailingNoise($body)
-    {
-        return rtrim($body, " \t\n\r\0\x0B");
-    }
+{
+    $body = rtrim($body, " \t\n\r\0\x0B");
+
+    $body = preg_replace('/(?:\s|<br\s*\/?>|<\/?p[^>]*>|<\/?div[^>]*>)*$/iu', '', $body);
+
+    $body = preg_replace(
+        '/(?:\s*(?:<img\b[^>]*>|image\d+\.(?:png|jpe?g|gif)(?:\?[^ \n\r<]*)?|Agrana Fruit in Fashion Banner|logo|логотип)\s*)+$/iu',
+        '',
+        $body
+    );
+
+    return rtrim($body, " \t\n\r\0\x0B");
+}
 }
