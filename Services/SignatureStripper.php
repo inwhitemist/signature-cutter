@@ -62,7 +62,7 @@ class SignatureStripper
      */
     protected function cleanHtml($body)
     {
-        $body = $this->stripSignatureImages($body);
+        $body = $this->stripKnownSignatureImages($body);
 
         $bodyWithLineBreaks = preg_replace(
             '/(<br\s*\/?>|<\/p>|<\/div>|<\/li>|<\/tr>|<\/h[1-6]>)/i',
@@ -135,6 +135,27 @@ class SignatureStripper
         }
 
         return min($candidates);
+    }
+
+    protected function stripKnownSignatureImages($html)
+    {
+        return preg_replace_callback('/<img\b[^>]*>/iu', function ($match) {
+            $img = $match[0];
+
+            $has400x200 =
+                preg_match('/\bwidth=["\']?400["\']?/iu', $img)
+                && preg_match('/\bheight=["\']?200["\']?/iu', $img);
+
+            $has125x73 =
+                preg_match('/\bwidth=["\']?125["\']?/iu', $img)
+                && preg_match('/\bheight=["\']?73["\']?/iu', $img);
+
+            if ($has400x200 || $has125x73) {
+                return '';
+            }
+
+            return $img;
+        }, $html);
     }
 
     /**
