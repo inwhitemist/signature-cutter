@@ -11,12 +11,22 @@ return [
     /*
      * Remove Outlook/Gmail-style quoted headers from the matched line to the end.
      */
-    'strip_reply_headers' => true,
+    'strip_reply_headers' => false,
 
     /*
      * Remove legal footers from the matched line to the end.
      */
     'strip_disclaimers' => true,
+
+    /*
+     * Emails matching these patterns are service noise and should be removed
+     * entirely instead of being shown as customer replies.
+     */
+    'drop_email_patterns' => [
+        '/\breacted to your message\s*:/iu',
+        '/your message to\s+rusv\.1c-support@agrana\.com\s+couldn(?:\'|\x{2019})t be delivered/iu',
+        '/only accepts messages from people in its organization or on its allowed senders list,?\s+and your email address isn(?:\'|\x{2019})t on the list/iu',
+    ],
 
     /*
      * Lines that usually start a human sign-off block.
@@ -42,7 +52,6 @@ return [
         'festivalnaya',
         'privacy principles',
         'limited liability company',
-        'огрн',
         'logo',
         'fashion banner',
     ],

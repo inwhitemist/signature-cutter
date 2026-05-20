@@ -92,7 +92,14 @@ class SignatureCutterServiceProvider extends ServiceProvider
             return;
         }
 
-        $cleaned = app(SignatureStripper::class)->clean($thread->body);
+        $stripper = app(SignatureStripper::class);
+
+        if ($stripper->shouldDrop($thread->body)) {
+            $this->dropThread($thread);
+            return;
+        }
+
+        $cleaned = $stripper->clean($thread->body);
 
         if ($cleaned === $thread->body) {
             return;
@@ -104,6 +111,96 @@ class SignatureCutterServiceProvider extends ServiceProvider
         if (config('signaturecutter.update_conversation_preview', true) && $thread->conversation) {
             $thread->conversation->setPreview($thread->body);
             $thread->conversation->save();
+        }
+    }
+
+    /**
+     * Remove a whole noisy incoming email and repair conversation fields
+     * that may have been updated by the customer reply.
+     *
+     * @param Thread $thread
+     *
+     * @return void
+     */
+    protected function dropThread(Thread $thread)
+    {
+        $conversation = $thread->conversation;
+
+        if (!empty($thread->first) && $conversation) {
+            if (method_exists($conversation, 'deleteForever')) {
+                $conversation->deleteForever();
+            } else {
+                $conversation->delete();
+            }
+
+            return;
+        }
+
+        if (method_exists($thread, 'deleteThread')) {
+            $thread->deleteThread();
+        } else {
+            $thread->delete();
+        }
+
+        if ($conversation) {
+            $this->restoreConversationAfterDroppedThread($conversation);
+        }
+    }
+
+    /**
+     * @param mixed $conversation
+     *
+     * @return void
+     */
+    protected function restoreConversationAfterDroppedThread($conversation)
+    {
+        $threads = Thread::where('conversation_id', $conversation->id)
+            ->where('state', Thread::STATE_PUBLISHED)
+            ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
+            ->get();
+
+        $lastReply = null;
+        $lastStatus = null;
+
+        foreach ($threads as $existingThread) {
+            if ($lastReply === null && in_array((int) $existingThread->type, [Thread::TYPE_CUSTOMER, Thread::TYPE_MESSAGE], true)) {
+                $lastReply = $existingThread;
+            }
+
+            if ($lastStatus === null
+                && in_array((int) $existingThread->status, [Thread::STATUS_ACTIVE, Thread::STATUS_PENDING, Thread::STATUS_CLOSED, Thread::STATUS_SPAM], true)
+                && (
+                    (int) $existingThread->action_type === Thread::ACTION_TYPE_STATUS_CHANGED
+                    || in_array((int) $existingThread->type, [Thread::TYPE_CUSTOMER, Thread::TYPE_MESSAGE], true)
+                )
+            ) {
+                $lastStatus = $existingThread;
+            }
+
+            if ($lastReply !== null && $lastStatus !== null) {
+                break;
+            }
+        }
+
+        if ($lastReply) {
+            $conversation->last_reply_at = $lastReply->created_at;
+            $conversation->last_reply_from = (int) $lastReply->type === Thread::TYPE_CUSTOMER
+                ? Thread::PERSON_CUSTOMER
+                : Thread::PERSON_USER;
+        }
+
+        if ($lastStatus) {
+            $conversation->status = $lastStatus->status;
+        }
+
+        $conversation->save();
+
+        if (method_exists('\App\Conversation', 'updatePreview')) {
+            \App\Conversation::updatePreview($conversation->id);
+        } elseif (method_exists($conversation, 'setPreview')) {
+            $conversation->setPreview($lastReply ? $lastReply->body : '');
+            $conversation->save();
         }
     }
 

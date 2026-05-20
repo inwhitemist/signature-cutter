@@ -19,6 +19,14 @@ $cases = [
         "Новый комментарий.\n\nFrom: \nSent: Saturday, May 16, 2026 11:11 PM\nTo:\nCc: \nSubject: Статус контейнера\n\nold text",
         "Новый комментарий.",
     ],
+    [
+        "Ivan Petrov reacted to your message:\r\n\r\n\"Принято\"",
+        "",
+    ],
+    [
+        "<div>Your message to rusv.1c-support@agrana.com couldn't be delivered.</div><div>rusv.1c-support only accepts messages from people in its organization or on its allowed senders list, and your email address isn't on the list.</div>",
+        "",
+    ],
 ];
 
 foreach ($cases as $index => $case) {

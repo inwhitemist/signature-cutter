@@ -30,11 +30,44 @@ class SignatureStripper
             return (string) $body;
         }
 
+        if ($this->shouldDrop($body)) {
+            return '';
+        }
+
         if ($this->looksLikeHtml($body)) {
             return $this->cleanHtml($body);
         }
 
         return $this->cleanPlainText($body);
+    }
+
+    /**
+     * Check if the whole email is service noise and should not be shown.
+     *
+     * @param string|null $body
+     *
+     * @return bool
+     */
+    public function shouldDrop($body)
+    {
+        if (!is_string($body) || trim($body) === '') {
+            return false;
+        }
+
+        $text = $this->bodyToSearchText($body);
+        $patterns = isset($this->config['drop_email_patterns']) ? $this->config['drop_email_patterns'] : [];
+
+        foreach ($patterns as $pattern) {
+            if (@preg_match($pattern, '') === false) {
+                continue;
+            }
+
+            if (preg_match($pattern, $text)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -405,6 +438,30 @@ class SignatureStripper
     protected function htmlLineToText($line)
     {
         return html_entity_decode(strip_tags($line), $this->htmlDecodeFlags(), 'UTF-8');
+    }
+
+    /**
+     * @param string $body
+     *
+     * @return string
+     */
+    protected function bodyToSearchText($body)
+    {
+        $body = $this->normalizeNewlines($body);
+
+        if ($this->looksLikeHtml($body)) {
+            $body = preg_replace(
+                '/(<br\s*\/?>|<\/p>|<\/div>|<\/li>|<\/tr>|<\/h[1-6]>)/i',
+                "$1\n",
+                $body
+            );
+        }
+
+        $body = html_entity_decode(strip_tags($body), $this->htmlDecodeFlags(), 'UTF-8');
+        $body = str_replace("\xC2\xA0", ' ', $body);
+        $body = preg_replace('/[ \t\x{00A0}]+/u', ' ', $body);
+
+        return trim($this->lower($body));
     }
 
     /**
