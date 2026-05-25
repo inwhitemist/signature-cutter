@@ -123,96 +123,52 @@ class SignatureStripper
      * @return int|null
      */
     protected function findCutLine(array $lines)
-{
-    $normalized = array_map(function ($line) {
-        return $this->normalizeLine($line);
-    }, $lines);
+    {
+        $normalized = array_map(function ($line) {
+            return $this->normalizeLine($line);
+        }, $lines);
+        $candidates = [];
 
-    $quoteBoundary = $this->findQuoteBoundary($normalized);
-    $candidates = [];
+        foreach ($normalized as $index => $line) {
+            if ($line === '') {
+                continue;
+            }
 
-    foreach ($normalized as $index => $line) {
-        if ($line === '') {
-            continue;
+            if ($this->isReplyHeaderStart($normalized, $index)) {
+                $candidates[] = $index;
+            }
+
+            if ($this->isDisclaimerStart($line)) {
+                $candidates[] = $index;
+            }
         }
 
-        if ($this->isReplyHeaderStart($normalized, $index)) {
-            $candidates[] = $index;
+        foreach ($normalized as $index => $line) {
+            if ($line === '') {
+                continue;
+            }
+
+            if ($this->isSignatureStarter($line) && $this->hasSignatureEvidenceAfter($normalized, $index)) {
+                $candidates[] = $index;
+            }
         }
 
-        if ($this->isDisclaimerStart($line)) {
-            $candidates[] = $index;
+        foreach ($normalized as $index => $line) {
+            if ($line === '') {
+                continue;
+            }
+
+            if ($this->isStandaloneSignatureLine($line) && $this->isNearBottom($normalized, $index)) {
+                $candidates[] = $index;
+            }
         }
+
+        if (!$candidates) {
+            return null;
+        }
+
+        return min($candidates);
     }
-
-    foreach ($normalized as $index => $line) {
-        if ($line === '') {
-            continue;
-        }
-
-        // Всё ниже явной пересылки/цитаты не считаем подписью текущего письма
-        if ($quoteBoundary !== null && $index >= $quoteBoundary) {
-            break;
-        }
-
-        if (
-            $this->isSignatureStarter($line)
-            && $this->hasSignatureEvidenceAfter($normalized, $index)
-            && $this->isRealSignaturePosition($normalized, $index)
-    ) {
-        $candidates[] = $index;
-    }
-    }
-
-    if (!$candidates) {
-        return null;
-    }
-
-    return min($candidates);
-}
-
-protected function isRealSignaturePosition(array $lines, $index)
-{
-    $meaningfulLinesAfter = 0;
-
-    for ($i = $index + 1; $i < count($lines); $i++) {
-        $line = trim($lines[$i]);
-
-        if ($line === '') {
-            continue;
-        }
-
-        if (
-            $this->isContactLine($line)
-            || $this->isCorporateMarkerLine($line)
-            || $this->isDisclaimerStart($line)
-            || $this->looksLikePersonName($line)
-            || $this->isPipeSeparatedIdentity($line)
-        ) {
-            continue;
-        }
-
-        $meaningfulLinesAfter++;
-    }
-
-    
-    return $meaningfulLinesAfter <= 3;
-}
-
-protected function findQuoteBoundary(array $lines)
-{
-    foreach ($lines as $index => $line) {
-        if ($this->matchesAny($line, [
-            '/^-{2,}\s*original message\s*-{2,}$/iu',
-            '/^-{2,}\s*forwarded message\s*-{2,}$/iu',
-            '/^begin forwarded message$/iu',
-        ])) {
-            return $index;
-        }
-    }
-
-    return null;
-}
 
     protected function stripKnownSignatureImages($html)
     {
@@ -320,38 +276,32 @@ protected function findQuoteBoundary(array $lines)
      *
      * @return bool
      */
-    protected function hasSignatureEvidenceAfter(array $lines, $index, $limit = null)
-{
-    $window = array_slice($lines, $index + 1, 14);
-    $evidence = 0;
+    protected function hasSignatureEvidenceAfter(array $lines, $index)
+    {
+        $window = array_slice($lines, $index + 1, 14);
+        $evidence = 0;
 
-    foreach ($window as $lineIndex => $line) {
-        $absoluteIndex = $index + 1 + $lineIndex;
+        foreach ($window as $line) {
+            if ($line === '') {
+                continue;
+            }
 
-        if ($limit !== null && $absoluteIndex >= $limit) {
-            break;
+            if ($this->isCorporateMarkerLine($line)
+                || $this->isContactLine($line)
+                || $this->isPipeSeparatedIdentity($line)
+                || $this->looksLikePersonName($line)
+                || $this->isDisclaimerStart($line)
+            ) {
+                $evidence++;
+            }
+
+            if ($evidence >= 1) {
+                return true;
+            }
         }
 
-        if ($line === '') {
-            continue;
-        }
-
-        if ($this->isCorporateMarkerLine($line)
-            || $this->isContactLine($line)
-            || $this->isPipeSeparatedIdentity($line)
-            || $this->looksLikePersonName($line)
-            || $this->isDisclaimerStart($line)
-        ) {
-            $evidence++;
-        }
-
-        if ($evidence >= 1) {
-            return true;
-        }
+        return $this->isNearBottom($lines, $index);
     }
-
-    return $this->isNearBottom($lines, $index);
-}
 
     /**
      * @param string $line
