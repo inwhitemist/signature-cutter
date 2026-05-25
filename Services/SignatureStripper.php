@@ -155,9 +155,13 @@ class SignatureStripper
             break;
         }
 
-        if ($this->isSignatureStarter($line) && $this->hasSignatureEvidenceAfter($normalized, $index, $quoteBoundary)) {
-            $candidates[] = $index;
-        }
+        if (
+            $this->isSignatureStarter($line)
+            && $this->hasSignatureEvidenceAfter($normalized, $index)
+            && $this->isRealSignaturePosition($normalized, $index)
+    ) {
+        $candidates[] = $index;
+    }
     }
 
     if (!$candidates) {
@@ -165,6 +169,34 @@ class SignatureStripper
     }
 
     return min($candidates);
+}
+
+protected function isRealSignaturePosition(array $lines, $index)
+{
+    $meaningfulLinesAfter = 0;
+
+    for ($i = $index + 1; $i < count($lines); $i++) {
+        $line = trim($lines[$i]);
+
+        if ($line === '') {
+            continue;
+        }
+
+        if (
+            $this->isContactLine($line)
+            || $this->isCorporateMarkerLine($line)
+            || $this->isDisclaimerStart($line)
+            || $this->looksLikePersonName($line)
+            || $this->isPipeSeparatedIdentity($line)
+        ) {
+            continue;
+        }
+
+        $meaningfulLinesAfter++;
+    }
+
+    
+    return $meaningfulLinesAfter <= 3;
 }
 
 protected function findQuoteBoundary(array $lines)
