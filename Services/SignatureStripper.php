@@ -43,7 +43,7 @@ class SignatureStripper
     protected function stripAgranaDisclaimer($body)
     {
         return preg_replace(
-            '/Disclaimer:\s*This message contains confidential information.*?Festivalnaya Str\.,\s*5\s*\|\s*142203\s*Russia/isu',
+            '/Disclaimer:\s*This\s+message\s+contains\s+confidential\s+information.*?142203\s*Russia/isu',
             '',
             $body
         );
