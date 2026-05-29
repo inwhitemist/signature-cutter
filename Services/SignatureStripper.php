@@ -129,6 +129,7 @@ class SignatureStripper
         }, $lines);
         $candidates = [];
 
+        // Первый приоритет: reply headers
         foreach ($normalized as $index => $line) {
             if ($line === '') {
                 continue;
@@ -143,6 +144,7 @@ class SignatureStripper
             }
         }
 
+        // Второй приоритет: signature starters
         foreach ($normalized as $index => $line) {
             if ($line === '') {
                 continue;
@@ -153,6 +155,7 @@ class SignatureStripper
             }
         }
 
+        // Третий приоритет: standalone signature lines
         foreach ($normalized as $index => $line) {
             if ($line === '') {
                 continue;
@@ -163,11 +166,90 @@ class SignatureStripper
             }
         }
 
+        // Четвёртый приоритет: явные маркеры подписи (номера телефонов, дисклеймеры)
+        // Это помогает обнаруживать подписи, которые не совпадают с другими критериями
+        foreach ($normalized as $index => $line) {
+            if ($line === '') {
+                continue;
+            }
+
+            if ($this->isExplicitPhoneSignature($line)) {
+                $signatureStart = $this->findSignatureBlockStart($normalized, $index);
+                if ($signatureStart !== null) {
+                    $candidates[] = $signatureStart;
+                }
+            }
+        }
+
         if (!$candidates) {
             return null;
         }
 
         return min($candidates);
+    }
+
+    /**
+     * Проверяет, содержит ли строка явно номер телефона как маркер подписи
+     * @param string $line
+     * @return bool
+     */
+    protected function isExplicitPhoneSignature($line)
+    {
+        // Номера телефонов в формате T: +7 (...), M: +7 (...)
+        // Это явный маркер подписи
+        return preg_match('/\b[tm]\s*:\s*\+\d[\d\s().-]{6,}/iu', $line) !== false
+            && preg_match('/\b[tm]\s*:\s*\+\d[\d\s().-]{6,}/iu', $line) > 0;
+    }
+
+    /**
+     * Находит начало блока подписи, заглядывая назад от явного маркера
+     * @param array $lines
+     * @param int $index
+     * @return int|null
+     */
+    protected function findSignatureBlockStart(array $lines, $index)
+    {
+        // Ищем начало блока подписи, заглядывая назад
+        // Подпись обычно предваряется горизонтальной линией или пустыми строками
+        $startIndex = $index;
+
+        // Заглядываем максимум на 10 строк назад для поиска начала
+        $lookback = max(0, $index - 10);
+        for ($i = $index - 1; $i >= $lookback; $i--) {
+            $line = $lines[$i];
+            $normalizedLine = $this->normalizeLine($line);
+
+            // Если встретили горизонтальную линию, она - это начало подписи
+            if ($this->isHorizontalLine($normalizedLine) || $this->isHorizontalLine($line)) {
+                return $i; // Включить горизонтальную линию в обрезку
+            }
+
+            // Если встретили reply header, это граница между письмами
+            if ($this->isReplyHeaderStart($lines, $i)) {
+                return $index; // Возвращаем текущую строку
+            }
+
+            // Если встретили пустую строку, это может быть началом
+            if ($normalizedLine === '' && $i < $index - 1) {
+                // Проверим, если ниже есть еще содержимое подписи
+                return $i + 1;
+            }
+
+            $startIndex = $i;
+        }
+
+        return $startIndex;
+    }
+
+    /**
+     * Проверяет, является ли строка горизонтальной линией
+     * @param string $line
+     * @return bool
+     */
+    protected function isHorizontalLine($line)
+    {
+        // Горизонтальные линии: ----, ====, ____, <hr>, ------, и т.д.
+        return (bool) preg_match('/^[\s\-=_<>\/br]*[\-=_]+[\s\-=_<>\/br]*$/iu', $line);
     }
 
     protected function stripKnownSignatureImages($html)
@@ -245,9 +327,10 @@ class SignatureStripper
 
         return $this->matchesAny($line, [
             '/^disclaimer\s*:/iu',
-            '/confidential information/iu',
+            '/this message contains confidential information/iu',
             '/solely intended for the addressee/iu',
             '/any copying.*strictly forbidden/iu',
+            '/confidential.*solely intended/iu',
         ]);
     }
 
@@ -295,12 +378,13 @@ class SignatureStripper
                 $evidence++;
             }
 
-            if ($evidence >= 1) {
+            // Требуем больше свидетельств перед тем как назвать это подписью
+            if ($evidence >= 2) {
                 return true;
             }
         }
 
-        return $this->isNearBottom($lines, $index);
+        return $this->isNearBottom($lines, $index) && $evidence >= 1;
     }
 
     /**
@@ -325,15 +409,28 @@ class SignatureStripper
             return false;
         }
 
-        $parts = array_values(array_filter(array_map('trim', explode('|', $line))));
+        $parts = array_values(array_filter(array_map('trim', explode('|', $line)), function($p) { return $p !== ''; }));
 
-        if (count($parts) >= 3 && $this->looksLikePersonName($parts[0])) {
+        // Если есть хотя бы одна часть, которая выглядит как имя
+        if (count($parts) >= 1 && $this->looksLikePersonName($parts[0])) {
             return true;
         }
 
-        return $this->isContactLine($line)
-            || $this->isCorporateMarkerLine($line)
-            || $this->looksLikePersonName($line);
+        // Если есть контактная информация в любой из частей
+        if (count($parts) >= 1) {
+            foreach ($parts as $part) {
+                if ($this->isContactLine($part)) {
+                    return true;
+                }
+            }
+        }
+
+        // Если есть несколько частей и первая не выглядит как URL/email, это вероятно подпись
+        if (count($parts) >= 2 && !preg_match('/^https?:\/\//i', $parts[0])) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -343,12 +440,32 @@ class SignatureStripper
      */
     protected function isContactLine($line)
     {
-        return $this->matchesAny($line, [
-            '/\b(phone|mobile|e-mail|email|tel|t|m)\s*:/iu',
-            '/\+\d[\d\s().-]{6,}/u',
-            '/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/iu',
-            '/https?:\/\/\S+/iu',
-        ]);
+        // Явные маркеры телефонных номеров (T:, M:, Phone, Mobile, Tel и т.д.)
+        if (preg_match('/\b(phone|mobile|e-mail|email|tel|t|m|т|м)\s*:/iu', $line)) {
+            return true;
+        }
+
+        // Номера телефонов с явно указанными расширениями (Ext., ext.)
+        if (preg_match('/\bext\.\s*\d+/iu', $line)) {
+            return true;
+        }
+
+        // Стандартные номера телефонов (например +7 (...)...)
+        if (preg_match('/\+\d[\d\s().-]{6,}/u', $line)) {
+            return true;
+        }
+
+        // Email адреса
+        if (preg_match('/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/iu', $line)) {
+            return true;
+        }
+
+        // URLs
+        if (preg_match('/https?:\/\/\S+/iu', $line)) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -400,7 +517,9 @@ class SignatureStripper
             }
         }
 
-        return $nonEmptyAfter <= 16;
+        // Более консервативный подход: не обрезаем, если много текста после
+        // Это предотвращает удаление контента, который стоит ниже подписи
+        return $nonEmptyAfter <= 20;
     }
 
     /**

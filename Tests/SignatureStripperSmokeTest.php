@@ -27,6 +27,11 @@ $cases = [
         "<div>Your message to rusv.1c-support@agrana.com couldn't be delivered.</div><div>rusv.1c-support only accepts messages from people in its organization or on its allowed senders list, and your email address isn't on the list.</div>",
         "",
     ],
+    // Новый тест: подпись с номерами телефонов должна быть обрезана, но контент после подписи (следующее письмо) должен быть сохранён
+    [
+        "Коллеги, привет\n\nБыла наша разовая доставка клиенту.\nЗадания на перевозку нет, реализация 0000-001637, стоит самовывоз.\n\nПросьба сделать задание.\n\n---\n\nVadim VORONIN | Senior Logistics Specialist | T: +7 (4967) 76-09-70 (Ext. 56771) | M: +7 (915) 190-21-68\n\nDisclaimer: This message contains confidential information\n\nFrom: MAKAROVA Elena\nSent: Thursday, April 30, 2026 4:31 PM\nTo: LEBEDEVA Elena\nSubject: Важное сообщение\n\nЭто важное сообщение из другого письма в цепочке.",
+        "Коллеги, привет\n\nБыла наша разовая доставка клиенту.\nЗадания на перевозку нет, реализация 0000-001637, стоит самовывоз.\n\nПросьба сделать задание.",
+    ],
 ];
 
 foreach ($cases as $index => $case) {
