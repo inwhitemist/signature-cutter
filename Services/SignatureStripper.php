@@ -33,12 +33,20 @@ class SignatureStripper
         if ($this->shouldDrop($body)) {
             return '';
         }
-
+        $body = $this->stripAgranaDisclaimer($body);
         if ($this->looksLikeHtml($body)) {
             return $this->cleanHtml($body);
         }
 
         return $this->cleanPlainText($body);
+    }
+    protected function stripAgranaDisclaimer($body)
+    {
+        return preg_replace(
+            '/Disclaimer:\s*This message contains confidential information.*?Festivalnaya Str\.,\s*5\s*\|\s*142203\s*Russia/isu',
+            '',
+            $body
+        );
     }
 
     /**
@@ -176,64 +184,50 @@ class SignatureStripper
      * @return int
      */
     protected function findSignatureBlockEnd(array $lines, $start)
-{
-    $maxScan = min(count($lines) - 1, $start + 15);
+    {
+        $maxScan = min(count($lines) - 1, $start + 15);
 
-    $end = $start;
+        $end = $start;
 
-    $insideDisclaimer = false;
+        for ($i = $start + 1; $i <= $maxScan; $i++) {
 
-    for ($i = $start + 1; $i <= $maxScan; $i++) {
+            $line = $lines[$i];
 
-        $line = $lines[$i];
+            // quoted reply starts -> stop
+            if ($this->isQuotedReplyStart($line)) {
+                break;
+            }
 
-        // quoted thread start -> stop
-        if ($this->isQuotedReplyStart($line)) {
+            // allow empty lines inside signature
+            if ($line === '') {
+                $end = $i;
+                continue;
+            }
+
+            // signature-related lines
+            if (
+                $this->isCorporateMarkerLine($line)
+                || $this->isContactLine($line)
+                || $this->looksLikePersonName($line)
+                || $this->isDisclaimerStart($line)
+                || $this->isPipeSeparatedIdentity($line)
+            ) {
+                $end = $i;
+                continue;
+            }
+
+            // logo/banner/etc
+            if (preg_match('/logo|banner|privacy|confidential/iu', $line)) {
+                $end = $i;
+                continue;
+            }
+
+            // ordinary text -> signature ended
             break;
         }
 
-        // disclaimer mode
-        if (
-            $insideDisclaimer
-            || $this->isDisclaimerStart($line)
-        ) {
-
-            $insideDisclaimer = true;
-
-            $end = $i;
-
-            continue;
-        }
-
-        // empty lines allowed
-        if ($line === '') {
-            $end = $i;
-            continue;
-        }
-
-        // signature-related lines
-        if (
-            $this->isCorporateMarkerLine($line)
-            || $this->isContactLine($line)
-            || $this->looksLikePersonName($line)
-            || $this->isPipeSeparatedIdentity($line)
-        ) {
-            $end = $i;
-            continue;
-        }
-
-        // logo/banner/privacy/etc
-        if (preg_match('/logo|banner|privacy|confidential/iu', $line)) {
-            $end = $i;
-            continue;
-        }
-
-        // ordinary text -> signature ended
-        break;
+        return $end;
     }
-
-    return $end;
-}
 
     /**
      * @param string $line
@@ -292,16 +286,7 @@ class SignatureStripper
      */
     protected function isDisclaimerStart($line)
     {
-        if (empty($this->config['strip_disclaimers'])) {
-            return false;
-        }
-
-        return $this->matchesAny($line, [
-            '/^disclaimer\s*:/iu',
-            '/confidential information/iu',
-            '/solely intended for the addressee/iu',
-            '/any copying.*strictly forbidden/iu',
-        ]);
+       return false;
     }
 
     /**
