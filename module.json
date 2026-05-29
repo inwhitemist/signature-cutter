@@ -2,7 +2,7 @@
     "name": "SignatureCutter",
     "alias": "signaturecutter",
     "description": "Cuts noisy signatures and forwarded mail headers from incoming customer emails.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "detailsUrl": "",
     "author": "Local",
     "authorUrl": "",
