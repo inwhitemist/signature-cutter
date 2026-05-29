@@ -176,50 +176,64 @@ class SignatureStripper
      * @return int
      */
     protected function findSignatureBlockEnd(array $lines, $start)
-    {
-        $maxScan = min(count($lines) - 1, $start + 15);
+{
+    $maxScan = min(count($lines) - 1, $start + 15);
 
-        $end = $start;
+    $end = $start;
 
-        for ($i = $start + 1; $i <= $maxScan; $i++) {
+    $insideDisclaimer = false;
 
-            $line = $lines[$i];
+    for ($i = $start + 1; $i <= $maxScan; $i++) {
 
-            // quoted reply starts -> stop
-            if ($this->isQuotedReplyStart($line)) {
-                break;
-            }
+        $line = $lines[$i];
 
-            // allow empty lines inside signature
-            if ($line === '') {
-                $end = $i;
-                continue;
-            }
-
-            // signature-related lines
-            if (
-                $this->isCorporateMarkerLine($line)
-                || $this->isContactLine($line)
-                || $this->looksLikePersonName($line)
-                || $this->isDisclaimerStart($line)
-                || $this->isPipeSeparatedIdentity($line)
-            ) {
-                $end = $i;
-                continue;
-            }
-
-            // logo/banner/etc
-            if (preg_match('/logo|banner|privacy|confidential/iu', $line)) {
-                $end = $i;
-                continue;
-            }
-
-            // ordinary text -> signature ended
+        // quoted thread start -> stop
+        if ($this->isQuotedReplyStart($line)) {
             break;
         }
 
-        return $end;
+        // disclaimer mode
+        if (
+            $insideDisclaimer
+            || $this->isDisclaimerStart($line)
+        ) {
+
+            $insideDisclaimer = true;
+
+            $end = $i;
+
+            continue;
+        }
+
+        // empty lines allowed
+        if ($line === '') {
+            $end = $i;
+            continue;
+        }
+
+        // signature-related lines
+        if (
+            $this->isCorporateMarkerLine($line)
+            || $this->isContactLine($line)
+            || $this->looksLikePersonName($line)
+            || $this->isPipeSeparatedIdentity($line)
+        ) {
+            $end = $i;
+            continue;
+        }
+
+        // logo/banner/privacy/etc
+        if (preg_match('/logo|banner|privacy|confidential/iu', $line)) {
+            $end = $i;
+            continue;
+        }
+
+        // ordinary text -> signature ended
+        break;
     }
+
+    return $end;
+}
 
     /**
      * @param string $line
