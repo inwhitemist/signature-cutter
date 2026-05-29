@@ -209,7 +209,6 @@ class SignatureStripper
                 $this->isCorporateMarkerLine($line)
                 || $this->isContactLine($line)
                 || $this->looksLikePersonName($line)
-                || $this->isDisclaimerStart($line)
                 || $this->isPipeSeparatedIdentity($line)
             ) {
                 $end = $i;
@@ -339,7 +338,6 @@ class SignatureStripper
                 || $this->isContactLine($line)
                 || $this->isPipeSeparatedIdentity($line)
                 || $this->looksLikePersonName($line)
-                || $this->isDisclaimerStart($line)
             ) {
                 $evidence++;
             }
