@@ -43,7 +43,7 @@ class SignatureStripper
     protected function stripAgranaDisclaimer($body)
     {
         return preg_replace(
-            '/Disclaimer:\s*This\s+message\s+contains\s+confidential\s+information.*?142203\s*Russia/isu',
+            '/Disclaimer:\s*This\s+message\s+contains\s+confidential\s+information.*?Festivalnaya\s+Str\.,\s*5\s*\|\s*142203\s*Russia/isu',
             '',
             $body
         );
@@ -99,6 +99,12 @@ class SignatureStripper
             array_splice($lines, $start, $end - $start + 1);
         }
 
+        $quotedReplyStart = $this->findQuotedReplyBlockStart($lines);
+
+        if ($quotedReplyStart !== null) {
+            array_splice($lines, $quotedReplyStart);
+        }
+
         return $this->trimTrailingNoise(
             implode("\n", $lines)
         );
@@ -131,6 +137,13 @@ class SignatureStripper
             [$start, $end] = $block;
 
             array_splice($lines, $start, $end - $start + 1);
+            array_splice($plainLines, $start, $end - $start + 1);
+        }
+
+        $quotedReplyStart = $this->findQuotedReplyBlockStart($plainLines);
+
+        if ($quotedReplyStart !== null) {
+            array_splice($lines, $quotedReplyStart);
         }
 
         return $this->trimTrailingNoise(
@@ -151,28 +164,222 @@ class SignatureStripper
             return $this->normalizeLine($line);
         }, $lines);
 
+        $agranaBlock = $this->findAgranaSignatureBlock($normalized);
+
+        if ($agranaBlock !== null) {
+            return $agranaBlock;
+        }
+
         foreach ($normalized as $index => $line) {
 
             if ($line === '') {
                 continue;
             }
 
+            $isSignatureStarter = $this->isSignatureStarter($line);
+            $isStandaloneSignatureLine = $this->isStandaloneSignatureLine($line);
+
             if (
-                $this->isSignatureStarter($line)
-                || $this->isStandaloneSignatureLine($line)
+                $isSignatureStarter
+                || $isStandaloneSignatureLine
             ) {
 
-                if (!$this->hasSignatureEvidenceAfter($normalized, $index)) {
+                if (
+                    $isSignatureStarter
+                    && !$this->hasSignatureEvidenceAfter($normalized, $index)
+                ) {
                     continue;
                 }
 
+                $start = $isStandaloneSignatureLine
+                    ? $this->expandSignatureStart($normalized, $index)
+                    : $index;
                 $end = $this->findSignatureBlockEnd($normalized, $index);
 
-                return [$index, $end];
+                return [$start, $end];
             }
         }
 
         return null;
+    }
+
+    /**
+     * @param array $lines
+     * @param int   $start
+     *
+     * @return int
+     */
+    protected function expandSignatureStart(array $lines, $start)
+    {
+        for ($i = $start - 1; $i >= 0; $i--) {
+
+            if ($lines[$i] === '') {
+                continue;
+            }
+
+            if ($this->isSignatureSeparator($lines[$i])) {
+                return $i;
+            }
+
+            break;
+        }
+
+        return $start;
+    }
+
+    /**
+     * @param array $lines
+     *
+     * @return int|null
+     */
+    protected function findQuotedReplyBlockStart(array $lines)
+    {
+        $normalized = array_map(function ($line) {
+            return $this->normalizeLine($line);
+        }, $lines);
+
+        foreach ($normalized as $index => $line) {
+
+            if (!$this->isQuotedReplyStart($line)) {
+                continue;
+            }
+
+            $window = array_slice($normalized, $index, 8);
+            $hasFrom = false;
+            $hasSubject = false;
+
+            foreach ($window as $replyLine) {
+                $hasFrom = $hasFrom || preg_match('/^(from|от)\s*:/iu', $replyLine);
+                $hasSubject = $hasSubject || preg_match('/^(subject|тема)\s*:/iu', $replyLine);
+            }
+
+            if ($hasFrom && $hasSubject) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Find AGRANA signature with the legal footer that follows it.
+     *
+     * @param array $lines
+     *
+     * @return array|null
+     */
+    protected function findAgranaSignatureBlock(array $lines)
+    {
+        foreach ($lines as $index => $line) {
+
+            if (!$this->isAgranaCompanyAddressLine($line)) {
+                continue;
+            }
+
+            $start = $this->findAgranaSignatureStart($lines, $index);
+            $end = $this->findAgranaSignatureEnd($lines, $index);
+
+            return [$start, $end];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array $lines
+     * @param int   $companyLine
+     *
+     * @return int
+     */
+    protected function findAgranaSignatureStart(array $lines, $companyLine)
+    {
+        $minScan = max(0, $companyLine - 6);
+        $start = null;
+
+        for ($i = $companyLine - 1; $i >= $minScan; $i--) {
+
+            $line = $lines[$i];
+
+            if ($line === '') {
+                continue;
+            }
+
+            if (
+                $this->isPipeSeparatedIdentity($line)
+                || ($start === null && $this->looksLikePersonName($line))
+                || ($start !== null && $this->looksLikeShortSignatureName($line))
+                || $this->isSignatureStarter($line)
+                || ($start !== null && $this->isSignatureSeparator($line))
+            ) {
+                $start = $i;
+                continue;
+            }
+
+            break;
+        }
+
+        return $start !== null ? $start : $companyLine;
+    }
+
+    /**
+     * @param array $lines
+     * @param int   $companyLine
+     *
+     * @return int
+     */
+    protected function findAgranaSignatureEnd(array $lines, $companyLine)
+    {
+        $maxScan = min(count($lines) - 1, $companyLine + 30);
+        $end = $companyLine;
+
+        for ($i = $companyLine + 1; $i <= $maxScan; $i++) {
+
+            $line = $lines[$i];
+            $end = $i;
+
+            if ($this->isAgranaDisclaimerEndLine($line)) {
+                return $end;
+            }
+
+            if ($this->isQuotedReplyStart($line)) {
+                return $i - 1;
+            }
+        }
+
+        return $end;
+    }
+
+    /**
+     * @param string $line
+     *
+     * @return bool
+     */
+    protected function isAgranaCompanyAddressLine($line)
+    {
+        return strpos($line, 'agrana fruit moscow region llc') !== false
+            && strpos($line, 'festivalnaya street') !== false
+            && strpos($line, '142214 serpukhov') !== false;
+    }
+
+    /**
+     * @param string $line
+     *
+     * @return bool
+     */
+    protected function isAgranaDisclaimerEndLine($line)
+    {
+        return strpos($line, 'festivalnaya str., 5') !== false
+            && strpos($line, '142203 russia') !== false;
+    }
+
+    /**
+     * @param string $line
+     *
+     * @return bool
+     */
+    protected function isSignatureSeparator($line)
+    {
+        return (bool) preg_match('/^-{2,}$/u', $line);
     }
 
     /**
@@ -209,7 +416,9 @@ class SignatureStripper
                 $this->isCorporateMarkerLine($line)
                 || $this->isContactLine($line)
                 || $this->looksLikePersonName($line)
+                || $this->looksLikeShortSignatureName($line)
                 || $this->isPipeSeparatedIdentity($line)
+                || $this->isPipeSignatureLine($line)
             ) {
                 $end = $i;
                 continue;
@@ -295,7 +504,7 @@ class SignatureStripper
      */
     protected function isSignatureStarter($line)
     {
-        $line = $this->trimPunctuation($line);
+        $line = $this->normalizeStarterForCompare($line);
 
         $starters = isset($this->config['signature_starters'])
             ? $this->config['signature_starters']
@@ -304,15 +513,25 @@ class SignatureStripper
         foreach ($starters as $starter) {
 
             if (
-                $line === $this->trimPunctuation(
-                    $this->normalizeLine($starter)
-                )
+                $line === $this->normalizeStarterForCompare($starter)
             ) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * @param string $line
+     *
+     * @return string
+     */
+    protected function normalizeStarterForCompare($line)
+    {
+        return $this->trimPunctuation(
+            $this->normalizeLine($line)
+        );
     }
 
     /**
@@ -337,7 +556,9 @@ class SignatureStripper
                 $this->isCorporateMarkerLine($line)
                 || $this->isContactLine($line)
                 || $this->isPipeSeparatedIdentity($line)
+                || $this->isPipeSignatureLine($line)
                 || $this->looksLikePersonName($line)
+                || $this->looksLikeShortSignatureName($line)
             ) {
                 $evidence++;
             }
@@ -398,6 +619,17 @@ class SignatureStripper
      *
      * @return bool
      */
+    protected function isPipeSignatureLine($line)
+    {
+        return substr_count($line, '|') >= 2
+            && (bool) preg_match('/\p{L}/u', $line);
+    }
+
+    /**
+     * @param string $line
+     *
+     * @return bool
+     */
     protected function isContactLine($line)
     {
         return $this->matchesAny($line, [
@@ -447,6 +679,23 @@ class SignatureStripper
 
         return (bool) preg_match(
             '/^[\p{L}][\p{L}.\'-]+(\s+[\p{L}][\p{L}.\'-]+){1,3}\.?$/u',
+            $line
+        );
+    }
+
+    /**
+     * @param string $line
+     *
+     * @return bool
+     */
+    protected function looksLikeShortSignatureName($line)
+    {
+        if (preg_match('/[@\d|:\/]/u', $line)) {
+            return false;
+        }
+
+        return (bool) preg_match(
+            '/^[\p{L}][\p{L}.\'-]{1,}\.?$/u',
             $line
         );
     }
@@ -590,6 +839,42 @@ class SignatureStripper
             return mb_strtolower($text, 'UTF-8');
         }
 
+        $text = strtr($text, [
+            'А' => 'а',
+            'Б' => 'б',
+            'В' => 'в',
+            'Г' => 'г',
+            'Д' => 'д',
+            'Е' => 'е',
+            'Ё' => 'ё',
+            'Ж' => 'ж',
+            'З' => 'з',
+            'И' => 'и',
+            'Й' => 'й',
+            'К' => 'к',
+            'Л' => 'л',
+            'М' => 'м',
+            'Н' => 'н',
+            'О' => 'о',
+            'П' => 'п',
+            'Р' => 'р',
+            'С' => 'с',
+            'Т' => 'т',
+            'У' => 'у',
+            'Ф' => 'ф',
+            'Х' => 'х',
+            'Ц' => 'ц',
+            'Ч' => 'ч',
+            'Ш' => 'ш',
+            'Щ' => 'щ',
+            'Ъ' => 'ъ',
+            'Ы' => 'ы',
+            'Ь' => 'ь',
+            'Э' => 'э',
+            'Ю' => 'ю',
+            'Я' => 'я',
+        ]);
+
         return strtolower($text);
     }
 
@@ -631,4 +916,3 @@ class SignatureStripper
         return rtrim($body, " \t\n\r\0\x0B");
     }
 }
-

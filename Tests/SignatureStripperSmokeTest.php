@@ -32,6 +32,10 @@ $cases = [
         "Коллеги, привет\n\nБыла наша разовая доставка клиенту.\nЗадания на перевозку нет, реализация 0000-001637, стоит самовывоз.\n\nПросьба сделать задание.\n\n---\n\nVadim VORONIN | Senior Logistics Specialist | T: +7 (4967) 76-09-70 (Ext. 56771) | M: +7 (915) 190-21-68\n\nDisclaimer: This message contains confidential information\n\nFrom: MAKAROVA Elena\nSent: Thursday, April 30, 2026 4:31 PM\nTo: LEBEDEVA Elena\nSubject: Важное сообщение\n\nЭто важное сообщение из другого письма в цепочке.",
         "Коллеги, привет\n\nБыла наша разовая доставка клиенту.\nЗадания на перевозку нет, реализация 0000-001637, стоит самовывоз.\n\nПросьба сделать задание.",
     ],
+    [
+        "Добрый день.\n\nПрошу согласовать счет.\n\nTatiana BARANOVA| Finance, Controlling, Accounting, IT&Legal | Financial Director\n\n\nAGRANA Fruit Moscow region LLC | Festivalnaya street, 5 | 142214 Serpukhov, Russia\nPhone: +7 (4967) 76-09-70\nMobile: +7 (916) 814-91-30\nE-Mail:Tatiana.BARANOVA@agrana.com |https://www.agrana.com|Privacy Principles\n\nLogo\n\nDisclaimer: This message contains confidential information and is solely intended for the addressee(s). If you are not the intended recipient of this message or have received this message by mistake, please notify the sender immediately and delete this message from your system. Any copying, distribution, dissemination or publication of the information is strictly forbidden. LIMITED LIABILITY COMPANY“AGRANA Fruit Moscow region”| Registered Office: Russia | Serpukhov Moscow region |ОГРН1025006526962 | Festivalnaya Str., 5 | 142203 Russia\n\n\nAgrana Fruit in Fashion Banner",
+        "Добрый день.\n\nПрошу согласовать счет.",
+    ],
 ];
 
 foreach ($cases as $index => $case) {
